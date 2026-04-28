@@ -332,12 +332,12 @@ nutrition → photosynthesis
 ### Local Development
 ```bash
 # Backend
-cd curios-ai/backend
+cd backend
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
 # Frontend
-cd curios-ai/frontend
+cd frontend
 npm install
 npm run dev
 ```
