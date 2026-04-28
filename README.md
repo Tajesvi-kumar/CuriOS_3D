@@ -1,139 +1,94 @@
-# 🚀 CuriOS — AI Learning Gap Detector
+# CuriOS — AI Learning Gap Detector
 
-CuriOS is an AI-powered learning system that helps students truly understand concepts by identifying **root gaps in knowledge** and guiding them to solve problems **step-by-step instead of giving direct answers**.
-
----
-
-## 🧠 The Idea
-
-Most learning platforms give:
-- Direct answers ❌
-- Repeated explanations ❌
-
-CuriOS does something different:
-
-👉 It finds *why* a student is stuck  
-👉 Then helps them *fix it themselves*
+An AI-powered diagnostic tool for Indian school students (NCERT Class 5–10) that finds the **root cause** of learning gaps through conversational probing — not just tutoring.
 
 ---
 
-## 💡 What Makes CuriOS Unique
+## Project Structure
 
-- 🔍 Detects the **root cause** of confusion (not just the wrong answer)
-- 🧩 Uses a **concept dependency graph** to trace missing knowledge
-- 🧠 Encourages **active learning** by guiding students step-by-step
-- 🚫 Does NOT give instant answers — promotes real understanding
-
----
-
-## ⚙️ How It Works
-
-1. **Student Attempts a Question**  
-   Types or explains their answer
-
-2. **AI Analysis**  
-   Understands:
-   - What concepts were used  
-   - What was missing  
-   - What was avoided  
-
-3. **Concept Graph Traversal**  
-   Tracks dependencies to find the deepest missing concept
-
-4. **Root Gap Detection**  
-   Identifies the exact concept causing the problem
-
-5. **Guided Learning (Step-by-Step)**  
-   Instead of giving answers:
-   - AI asks questions  
-   - Gives hints  
-   - Breaks problem into steps  
-
-6. **Micro Explanation**  
-   Explains only the required concept in simple terms
-
-7. **Verification**  
-   Confirms understanding with a follow-up question
+```
+curios-ai/
+├── backend/        # Python FastAPI server
+└── frontend/       # React + Vite app
+```
 
 ---
 
-## 🔥 Features
+## Frontend
 
-- 🎯 Root Cause Learning
-- 🧠 Step-by-Step Problem Solving Guidance
-- 📊 Knowledge Gap Detection
-- 🌐 Multilingual Support
-- 📈 Progress Tracking & Reports
-- 🧑‍🏫 Teacher Dashboard (optional)
+**Stack:** React 19, TypeScript, Vite
 
----
+| Library | Use |
+|---|---|
+| `@react-three/fiber` | 3D canvas renderer (React wrapper for Three.js) |
+| `@react-three/drei` | Helpers — `Stars`, `Float`, `OrbitControls` |
+| `three` | 3D engine — geometries, materials, particle systems |
+| `framer-motion` | Page transitions, animated entry/exit of panels |
+| `zustand` | Global state — session, messages, gaps, mastery score |
+| `axios` | HTTP calls to the FastAPI backend |
+| `recharts` | Radar chart for subject mastery visualization |
+| `lucide-react` | Icons (e.g. speaker icon for text-to-speech) |
+| `tailwindcss` | Utility CSS (configured via Vite plugin) |
 
-## 🖥️ Tech Stack
+**Key Components:**
 
-### Frontend
-- React + Vite + TypeScript
-- Tailwind CSS
-- D3.js (Knowledge Graph Visualization)
-- Zustand (State Management)
-
-### Backend
-- Python + FastAPI
-- NetworkX (Graph Processing)
-
-### AI Layer
-- Gemini 1.5 Flash
-
-### Database
-- Supabase PostgreSQL
+- `LandingScene.tsx` — Full-screen 3D background with floating wireframe shapes, particle field, stars, glow ring, and cursor-reactive camera
+- `CursorGlow.tsx` — Custom glowing cursor with 12-dot animated trail effect
+- `App.tsx` — App state machine: Setup → Scanning → Main
+- `ChatArea.tsx` — Chat UI with typewriter effect for AI responses and Web Speech API for text-to-speech
+- `GapSidebar.tsx` — Live gap tracker with radar chart and color-coded gap status (root / confirmed / suspected)
+- `Scene.tsx` — 3D concept node visualization in the main chat view
 
 ---
 
-## 🏗️ Architecture Overview
+## Backend
 
-- **Client Layer** → Student Interface  
-- **Backend API** → Handles logic & requests  
-- **AI Engine** → Concept understanding & reasoning  
-- **Graph Engine** → Dependency tracking & gap detection  
-- **Database** → Stores sessions & student progress  
+**Stack:** Python, FastAPI
 
----
+| Library | Use |
+|---|---|
+| `fastapi` | REST API framework |
+| `uvicorn` | ASGI server to run FastAPI |
+| `httpx` | Async HTTP client to call Gemini API |
+| `pydantic` | Request body validation |
+| `python-dotenv` | Load `.env` variables |
+| `networkx` | Directed graph for concept dependency mapping |
+| `google-generativeai` (via HTTP) | Gemini 2.5 Flash — the AI diagnostic engine |
 
-## 🎯 Goal
+**Key Modules:**
 
-To shift learning from:
-❌ Memorizing answers  
-➡️  
-✅ Understanding concepts deeply  
-
----
-
-## 📌 Example
-
-**Question:** Why does hot air rise?
-
-Instead of giving the answer, CuriOS:
-- Checks understanding of "density"
-- Detects missing concept
-- Explains it simply
-- Guides student to derive the answer
+- `main.py` — FastAPI app with `/chat`, `/graph`, `/report` endpoints; manages per-session state
+- `concept_graph.py` — `ConceptGraphEngine` using NetworkX to trace root gaps and propagation risks from a concept dependency graph
+- `prompt_builder.py` — Builds the system prompt for Gemini with student profile, known gaps, and language preference
+- `concept_graph.json` — Node/edge data for NCERT concepts (matter, density, fractions, algebra, photosynthesis, etc.)
 
 ---
 
-## 🚀 Future Scope
+## How It Works
 
-- Voice-based interaction  
-- More subjects & deeper concept graphs  
-- Personalized learning paths  
-- Advanced analytics for teachers  
-
----
-
-## 📄 License
-
-MIT License
+1. Student enters name, class, subject, and language on the setup screen
+2. CuriOS asks one probing question at a time via Gemini 2.5 Flash
+3. Every AI response includes a hidden `<ANALYSIS>` block that detects which concept the student is confused about
+4. The backend uses `networkx` to trace the root cause and find which future topics are at risk
+5. The frontend visualizes gaps in real-time on the sidebar radar chart and 3D scene
 
 ---
 
-## ❤️ Philosophy
+## Running Locally
 
-> "Don’t give answers. Build understanding."
+**Backend:**
+```bash
+cd curios-ai/backend
+pip install fastapi uvicorn httpx python-dotenv networkx
+# Add GEMINI_API_KEY to .env
+uvicorn main:app --reload
+```
+
+**Frontend:**
+```bash
+cd curios-ai/frontend
+npm install
+npm run dev
+```
+
+App runs at `http://localhost:5173`, backend at `http://localhost:8000`.
