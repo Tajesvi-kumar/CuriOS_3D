@@ -92,3 +92,5 @@ npm run dev
 ```
 
 App runs at `http://localhost:5173`, backend at `http://localhost:8000`.
+
+Project reference: https://idea.unisys.com/D9119
