@@ -5,6 +5,7 @@ import ChatArea from './components/ChatArea'
 import Scene from './components/Scene'
 import LandingScene from './components/LandingScene'
 import CursorGlow from './components/CursorGlow'
+import QuizMode from './components/QuizMode'
 import { motion, AnimatePresence } from 'framer-motion'
 
 function SetupScreen({ onStart }: { onStart: () => void }) {
@@ -155,6 +156,7 @@ function ScanningScreen() {
 
 export default function App() {
   const [appState, setAppState] = useState<'setup' | 'scanning' | 'main'>('setup')
+  const { isQuizActive } = useStore()
 
   const handleStart = () => {
     setAppState('scanning')
@@ -203,6 +205,10 @@ export default function App() {
             </div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isQuizActive && <QuizMode />}
       </AnimatePresence>
     </div>
   )

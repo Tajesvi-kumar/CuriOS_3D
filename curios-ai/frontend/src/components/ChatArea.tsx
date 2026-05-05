@@ -3,7 +3,7 @@ import axios from 'axios'
 import { useStore } from '../store'
 import { Volume2 } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 
 function TypewriterMessage({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState('')
@@ -80,7 +80,10 @@ export default function ChatArea() {
         language: language,
         message: text,
       })
-      console.log('Response:', data)
+      console.log('API Response:', data)
+      console.log('Gaps:', data.gaps)
+      console.log('Root gaps:', data.root_gaps)
+      
       addMessage({ role: 'curios', content: data.message })
       updateFromResponse(data)
     } catch (error: any) {
@@ -109,12 +112,33 @@ export default function ChatArea() {
   return (
     <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: '24px', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span style={{ fontSize: '24px' }}>🔍</span>
-        <div>
-          <h1 style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>CuriOS Gap Detector</h1>
-          <p style={{ color: '#9ca3af', fontSize: '11px' }}>AI Learning Diagnostics • NCERT Class 5–10</p>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '24px' }}>🔍</span>
+          <div>
+            <h1 style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>CuriOS Gap Detector</h1>
+            <p style={{ color: '#9ca3af', fontSize: '11px' }}>AI Learning Diagnostics • NCERT Class 5–10</p>
+          </div>
         </div>
+        <button 
+          onClick={() => useStore.getState().setQuizActive(true)}
+          style={{
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            color: 'white',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
+          }}
+        >
+          <span style={{ fontSize: '14px' }}>📝</span> Quiz Mode
+        </button>
       </div>
 
       {/* Messages */}

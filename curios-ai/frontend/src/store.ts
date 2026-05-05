@@ -23,6 +23,9 @@ interface AppState {
   addMessage: (msg: Message) => void
   setLoading: (loading: boolean) => void
   updateFromResponse: (data: any) => void
+  isQuizActive: boolean
+  setQuizActive: (active: boolean) => void
+  updateGapsAndMastery: (gaps: Record<string, GapStatus>, mastery: number) => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -40,9 +43,16 @@ export const useStore = create<AppState>((set) => ({
   setLanguage: (language) => set({ language }),
   addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
   setLoading: (isLoading) => set({ isLoading }),
-  updateFromResponse: (data) => set({
-    gaps: data.gaps || {},
-    mastery: data.mastery ?? 100,
-    propagationRisks: data.propagation_risks || [],
+  updateFromResponse: (data) => set((state) => {
+    const newGaps = data.gaps || {}
+    console.log("Store gaps:", newGaps)
+    return {
+      gaps: newGaps,
+      mastery: data.mastery ?? 100,
+      propagationRisks: data.propagation_risks || [],
+    }
   }),
+  isQuizActive: false,
+  setQuizActive: (isQuizActive) => set({ isQuizActive }),
+  updateGapsAndMastery: (gaps, mastery) => set({ gaps, mastery }),
 }))
