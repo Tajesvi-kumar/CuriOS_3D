@@ -18,11 +18,11 @@ echo Node.js found!
 echo.
 
 echo Starting Backend Server...
-start "CuriOS Backend" cmd /k "cd curios-ai\backend && uvicorn main:app --reload --port 8000"
+start "CuriOS Backend" cmd /k "cd backend && uvicorn main:app --reload --port 8000"
 timeout /t 3 /nobreak >nul
 
 echo Starting Frontend Server...
-start "CuriOS Frontend" cmd /k "cd curios-ai\frontend && npm install && npm run dev"
+start "CuriOS Frontend" cmd /k "cd frontend && npm install && npm run dev"
 
 echo.
 echo ========================================

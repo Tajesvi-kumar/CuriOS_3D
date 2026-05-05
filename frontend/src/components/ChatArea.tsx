@@ -3,7 +3,7 @@ import axios from 'axios'
 import { useStore } from '../store'
 import { Volume2 } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8001'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function TypewriterMessage({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState('')
