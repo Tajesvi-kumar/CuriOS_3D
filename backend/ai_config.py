@@ -9,7 +9,22 @@ load_dotenv()
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3:8b")
-USE_OLLAMA = os.getenv("USE_OLLAMA", "false").lower() == "true"
+# Default to Ollama for local chat; set USE_OLLAMA=false to use Groq for chat as well.
+USE_OLLAMA = os.getenv("USE_OLLAMA", "true").lower() == "true"
+
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "mistralai/mistral-7b-instruct-v0.3")
+NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_CHAT_COMPLETIONS_URL = os.getenv(
+    "GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions"
+)
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
 
 def _extract_ollama_text(payload: dict) -> str:
@@ -44,7 +59,9 @@ def _build_local_tutor_reply(student_message: str) -> str:
         return "Fractions compare parts of a whole. If pizza is split into 8 equal slices, what does 3/8 represent?"
     if "heat" in lowered or "convection" in lowered:
         return "Nice thinking. When air gets hot it expands; what happens to its density then?"
-    return f"Good start. For '{text}', what is the first step or definition you already know?"
+    if any(question_word in lowered for question_word in ["what", "why", "how", "which", "where", "when", "explain", "understand", "confused", "don't", "cannot", "can't"]):
+        return f"Good question. For '{text}', which part is most confusing: the concept, the steps, or the words used?"
+    return f"Good start. Since you asked about '{text}', what do you think is the first key idea we should use?"
 
 
 def _build_local_analysis_json(student_message: str) -> str:
@@ -72,7 +89,6 @@ def _build_local_analysis_json(student_message: str) -> str:
 
 
 def _build_fallback_for_prompt(prompt: str) -> str:
-    # Analysis prompts require JSON; chat prompts can use text replies.
     if "ANALYSIS" in prompt.upper():
         return _build_local_analysis_json(_extract_last_student_message(prompt))
     return _build_local_tutor_reply(_extract_last_student_message(prompt))
@@ -107,85 +123,188 @@ async def call_ollama(prompt: str) -> str:
     raise RuntimeError(f"Ollama failed after retries: {last_error}")
 
 
-async def call_gemini(prompt: str) -> str:
-    key = os.getenv("GEMINI_API_KEY")
-    if not key:
-        print("[WARN] GEMINI_API_KEY is not configured, using local fallback")
+async def call_groq(prompt: str) -> str:
+    """Groq OpenAI-compatible chat completions. Env: GROQ_API_KEY, GROQ_MODEL."""
+    try:
+        key = (GROQ_API_KEY or os.getenv("GROQ_API_KEY") or "").strip()
+        if not key:
+            print("[WARN] GROQ_API_KEY is not configured, using local fallback")
+            return _build_fallback_for_prompt(prompt)
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                GROQ_CHAT_COMPLETIONS_URL,
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": GROQ_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7, # Higher temperature for variety
+                    "max_tokens": 2048,
+                },
+            )
+            if response.status_code != 200:
+                print(
+                    f"[WARN] Groq returned {response.status_code}, using local fallback. "
+                    f"Body: {response.text[:400]}"
+                )
+                return _build_fallback_for_prompt(prompt)
+            data = response.json()
+            try:
+                text = data["choices"][0]["message"]["content"]
+                if isinstance(text, str) and text.strip():
+                    return text.strip()
+                raise ValueError("Empty Groq message content")
+            except Exception as parse_error:
+                print(f"[WARN] Groq response parse failed: {parse_error}; using local fallback")
+                return _build_fallback_for_prompt(prompt)
+    except Exception as e:
+        print(f"[WARN] Groq request failed ({e!r}), using local fallback")
         return _build_fallback_for_prompt(prompt)
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={key}"
-    )
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            url,
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-        )
-        if response.status_code != 200:
-            print(f"[WARN] Gemini returned {response.status_code}, using local fallback")
-            return _build_fallback_for_prompt(prompt)
-        data = response.json()
-        try:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception as parse_error:
-            print(f"[WARN] Gemini response parse failed: {parse_error}; using local fallback")
-            return _build_fallback_for_prompt(prompt)
 
-
-async def call_ai(prompt: str) -> str:
-    print(f"Using: {'Ollama' if USE_OLLAMA else 'Gemini'}")
-    if USE_OLLAMA:
-        try:
-            return await call_ollama(prompt)
-        except Exception as ollama_error:
-            print(f"[WARN] Ollama failed, falling back to Gemini: {ollama_error}")
-            try:
-                return await call_gemini(prompt)
-            except Exception as gemini_error:
-                print(f"[ERROR] Gemini fallback also failed: {gemini_error}")
-                return _build_local_tutor_reply(_extract_last_student_message(prompt))
+async def call_gemini(prompt: str) -> str:
+    """Google Gemini API call."""
     try:
-        return await call_gemini(prompt)
-    except Exception as gemini_error:
-        print(f"[ERROR] Gemini failed: {gemini_error}")
-        return _build_local_tutor_reply(_extract_last_student_message(prompt))
+        key = (GEMINI_API_KEY or os.getenv("GEMINI_API_KEY") or "").strip()
+        if not key:
+            print("[WARN] GEMINI_API_KEY is not configured, falling back to Groq")
+            return await call_groq(prompt)
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                url,
+                headers={"Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.7,
+                        "maxOutputTokens": 2048,
+                    }
+                },
+            )
+            if response.status_code != 200:
+                print(f"[WARN] Gemini API error {response.status_code}: {response.text[:500]}")
+                return await call_groq(prompt)
+            
+            data = response.json()
+            try:
+                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except Exception:
+                raise ValueError("Invalid Gemini response structure")
+    except Exception as e:
+        print(f"[ERROR] Gemini API request failed: {e}")
+        return await call_groq(prompt)
+
+
+async def call_nvidia(prompt: str, model: str = None) -> str:
+    """NVIDIA NIM API call using specified model or default Mistral Medium 3.5."""
+    try:
+        key = (NVIDIA_API_KEY or os.getenv("NVIDIA_API_KEY") or "").strip()
+        if not key:
+            print("[WARN] NVIDIA_API_KEY is not configured, falling back to Groq")
+            return await call_groq(prompt)
+
+        # Log masked key for debugging
+        print(f"NVIDIA API Key loaded: {key[:8]}...{key[-4:]}")
+
+        model_name = model or os.getenv("NVIDIA_MODEL", "mistralai/mistral-medium-3.5-128b")
+        print(f"Calling NVIDIA NIM with model: {model_name}")
+        
+        # Adjust tokens based on task
+        is_analysis = "ANALYSIS" in prompt.upper()
+        is_quiz = "QUIZ" in prompt.upper() or "QUESTIONS" in prompt.upper()
+        
+        if is_analysis:
+            max_tokens = 150
+            timeout = 10.0 # Faster timeout for analysis
+        elif is_quiz:
+            max_tokens = 2500 
+            timeout = 60.0
+        else:
+            max_tokens = 1024 
+            timeout = 30.0
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                NVIDIA_URL,
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1 if is_analysis else 0.7, # Higher temperature for quiz variety
+                    "max_tokens": max_tokens,
+                    "top_p": 0.7,
+                },
+            )
+            
+            if response.status_code != 200:
+                print(f"[WARN] NVIDIA API error {response.status_code}: {response.text[:500]}")
+                return await call_groq(prompt)
+            
+            data = response.json()
+            if "choices" in data and len(data["choices"]) > 0:
+                content = data["choices"][0]["message"]["content"].strip()
+                # Remove potential thinking or reasoning tags if model adds them
+                content = re.sub(r'<thought>.*?</thought>', '', content, flags=re.DOTALL)
+                return content.strip()
+            
+            raise ValueError("Invalid response structure from NVIDIA API")
+            
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] NVIDIA API request failed: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return await call_groq(prompt)
+
+
+async def call_ai(prompt: str, model: str = None) -> str:
+    print(f"Using NVIDIA API for: {prompt[:50]}...")
+    return await call_nvidia(prompt, model=model)
 
 
 def extract_json(text: str) -> dict:
     import re, json
-    
+
     print("RAW ANALYSIS RESPONSE:", text)
     print("PARSING TEXT:", text[-500:])
-    
+
     try:
-        # Format 1: XML tags
         if "<ANALYSIS>" in text:
             start = text.index("<ANALYSIS>") + 10
             end = text.index("</ANALYSIS>")
             return json.loads(text[start:end].strip())
-    except: pass
-    
+    except Exception:
+        pass
+
     try:
-        # Format 2: Markdown JSON block
         match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
         if match:
             return json.loads(match.group(1))
-    except: pass
-    
+    except Exception:
+        pass
+
     try:
-        # Format 3: Last JSON object in text
         matches = re.findall(r'\{[^{}]*\}', text, re.DOTALL)
         if matches:
             for m in reversed(matches):
                 try:
                     return json.loads(m)
-                except: continue
-    except: pass
-    
-    # Default - no gap detected
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
     return {
         "detected_concept": None,
         "gap_status": "none",
-        "response_to_student": text
+        "response_to_student": text,
     }

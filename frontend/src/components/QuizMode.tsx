@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import { useStore } from '../store'
 import { X, CheckCircle, XCircle, BrainCircuit, RefreshCw } from 'lucide-react'
+import { jsPDF } from 'jspdf'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8011'
 
 interface Question {
   id: number
@@ -29,6 +30,15 @@ interface QuizResult {
   is_correct: boolean
 }
 
+interface AnswerRecord {
+  concept_id: string
+  is_correct: boolean
+  question_text: string
+  student_answer: string
+  correct_answer: string
+  question_type: string
+}
+
 export default function QuizMode() {
   const { sessionId, studentName, studentClass, studentSubject, language, gaps, setQuizActive, updateGapsAndMastery } = useStore()
   
@@ -38,7 +48,7 @@ export default function QuizMode() {
   const [currentIdx, setCurrentIdx] = useState(0)
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
   const [showFeedback, setShowFeedback] = useState(false)
-  const [answers, setAnswers] = useState<{ concept_id: string; is_correct: boolean }[]>([])
+  const [answers, setAnswers] = useState<AnswerRecord[]>([])
   const [results, setResults] = useState<{ results: QuizResult[], new_mastery: number, updated_gaps: any } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -48,22 +58,15 @@ export default function QuizMode() {
       try {
         setLoading(true)
         const knownGaps = gaps || {}
-        const topics = Object.keys(knownGaps).length > 0 ? Object.keys(knownGaps) : ['algebra basics', 'linear equations', 'fractions']
-        const res = await axios.post<QuizData>(`${API}/quiz/chapter`, {
+        const res = await axios.post<QuizData>(`${API}/quiz/generate`, {
           session_id: sessionId,
           student_name: studentName,
           student_class: studentClass,
-          subject: studentSubject || 'Mathematics',
-          chapter_no: 3,
-          chapter_title: 'Data Handling',
-          topics,
-          language,
-          known_gaps: knownGaps,
-          num_questions: 10
+          language: language
         })
         if (res.data && res.data.questions) {
           setQuestions(res.data.questions)
-          setChapterTitle(res.data.chapter_title || 'Practice Quiz')
+          setChapterTitle(res.data.chapter_title || 'Diagnostic Quiz')
         } else {
           setErrorMsg("Failed to generate questions. Please try again.")
         }
@@ -91,7 +94,14 @@ export default function QuizMode() {
     const current = questions[currentIdx]
     const selectedText = current.options[idx] ?? ''
     const isCorrect = selectedText.trim().toLowerCase() === current.correct_answer.trim().toLowerCase()
-    const newAnswers = [...answers, { concept_id: current.concept_tested || `q_${current.id}`, is_correct: isCorrect }]
+    const newAnswers = [...answers, {
+      concept_id: current.concept_tested || `q_${current.id}`,
+      is_correct: isCorrect,
+      question_text: current.question,
+      student_answer: selectedText,
+      correct_answer: current.correct_answer,
+      question_type: current.type || 'mcq'
+    }]
     setAnswers(newAnswers)
     
     setTimeout(() => {
@@ -105,12 +115,12 @@ export default function QuizMode() {
     }, 3500) // 3.5 seconds to read explanation
   }
 
-  const submitQuiz = async (finalAnswers: { concept_id: string; is_correct: boolean }[]) => {
+  const submitQuiz = async (finalAnswers: AnswerRecord[]) => {
     try {
       setSubmitting(true)
       const res = await axios.post(`${API}/quiz/submit`, {
         session_id: sessionId,
-        answers: finalAnswers
+        answers: finalAnswers  // now includes full question/answer data
       })
       setResults(res.data)
       updateGapsAndMastery(res.data.updated_gaps, res.data.new_mastery)
@@ -124,6 +134,62 @@ export default function QuizMode() {
 
   const handleClose = () => {
     setQuizActive(false)
+  }
+
+  const downloadWeakConceptsPdf = () => {
+    if (!results) return
+
+    const weakConcepts = results.results.filter(
+      r => r.new_status === 'suspected' || r.new_status === 'confirmed' || r.new_status === 'root'
+    )
+
+    const pdf = new jsPDF()
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const maxWidth = pageWidth - 20
+    let y = 20
+
+    pdf.setFontSize(18)
+    pdf.text('CuriOS Weak Concepts Report', 10, y)
+    y += 10
+
+    pdf.setFontSize(11)
+    pdf.text(`Student: ${studentName} | Class: ${studentClass}`, 10, y)
+    y += 7
+    pdf.text(`Chapter: ${chapterTitle}`, 10, y)
+    y += 7
+
+    const accuracy = Math.round((results.results.filter(r => r.is_correct).length / results.results.length) * 100)
+    pdf.text(`Accuracy: ${accuracy}% | Mastery: ${results.new_mastery}`, 10, y)
+    y += 10
+
+    if (weakConcepts.length === 0) {
+      pdf.text('Great work! No weak concepts detected in this quiz.', 10, y)
+      y += 8
+    } else {
+      pdf.setFontSize(13)
+      pdf.text('Detected Weak Concepts:', 10, y)
+      y += 8
+      pdf.setFontSize(11)
+
+      weakConcepts.forEach((concept, index) => {
+        const line = `${index + 1}. ${concept.concept_id.replace(/_/g, ' ')} (status: ${concept.new_status})`
+        const wrapped = pdf.splitTextToSize(line, maxWidth)
+        pdf.text(wrapped, 10, y)
+        y += wrapped.length * 6
+
+        if (y > 270) {
+          pdf.addPage()
+          y = 20
+        }
+      })
+    }
+
+    y += 6
+    pdf.setFontSize(10)
+    pdf.text('Tip: Focus first on concepts with confirmed/root status for faster improvement.', 10, y)
+
+    const safeName = (studentName || 'student').replace(/[^a-z0-9]/gi, '_').toLowerCase()
+    pdf.save(`curios-weak-concepts-${safeName}.pdf`)
   }
 
   return (
@@ -246,14 +312,31 @@ export default function QuizMode() {
                       : 'bg-red-500/10 border-red-500/30 text-red-200'
                   }`}
                 >
-                  <p className="font-bold mb-1">
-                    {(selectedOption !== null &&
+                  {(() => {
+                    const answeredCorrectly =
+                      selectedOption !== null &&
                       questions[currentIdx].options[selectedOption]?.trim().toLowerCase() ===
-                        questions[currentIdx].correct_answer.trim().toLowerCase())
-                      ? 'Correct!'
-                      : 'Not quite.'}
-                  </p>
-                  <p className="text-sm opacity-90">{questions[currentIdx].explanation}</p>
+                        questions[currentIdx].correct_answer.trim().toLowerCase()
+                    const explanationText = questions[currentIdx].explanation?.trim() ||
+                      `Review why '${questions[currentIdx].correct_answer}' is correct and compare it with your selection.`
+                    return (
+                      <>
+                        <p className="font-bold mb-1">
+                          {answeredCorrectly ? 'Correct!' : 'Not quite.'}
+                        </p>
+                        {!answeredCorrectly && (
+                          <p className="text-sm font-semibold mb-1">
+                            Correct answer: {questions[currentIdx].correct_answer}
+                          </p>
+                        )}
+                        <p className="text-sm opacity-90">
+                          {answeredCorrectly
+                            ? explanationText
+                            : `Explanation: ${explanationText}`}
+                        </p>
+                      </>
+                    )
+                  })()}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -318,12 +401,20 @@ export default function QuizMode() {
               ))}
             </div>
 
-            <button 
-              onClick={handleClose}
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-900/20"
-            >
-              Continue Learning
-            </button>
+            <div className="space-y-3">
+              <button 
+                onClick={downloadWeakConceptsPdf}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors"
+              >
+                Download Weak Concepts PDF
+              </button>
+              <button 
+                onClick={handleClose}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-900/20"
+              >
+                Continue Learning
+              </button>
+            </div>
           </motion.div>
         )}
 

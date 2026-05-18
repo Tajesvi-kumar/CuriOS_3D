@@ -18,7 +18,7 @@ echo Node.js found!
 echo.
 
 echo Starting Backend Server...
-start "CuriOS Backend" cmd /k "cd backend && uvicorn main:app --reload --port 8000"
+start "CuriOS Backend" cmd /k "cd backend && uvicorn main:app --reload --port 8011"
 timeout /t 3 /nobreak >nul
 
 echo Starting Frontend Server...
@@ -27,7 +27,7 @@ start "CuriOS Frontend" cmd /k "cd frontend && npm install && npm run dev"
 echo.
 echo ========================================
 echo Both servers are starting...
-echo Backend: http://localhost:8000
+echo Backend: http://127.0.0.1:8011
 echo Frontend: http://localhost:5173
 echo ========================================
 echo.

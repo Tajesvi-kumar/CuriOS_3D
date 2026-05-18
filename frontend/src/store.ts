@@ -19,6 +19,7 @@ interface AppState {
   mastery: number
   propagationRisks: string[]
   setStudent: (name: string, cls: number, subject: string) => void
+  setSessionId: (id: string) => void
   setLanguage: (lang: string) => void
   addMessage: (msg: Message) => void
   setLoading: (loading: boolean) => void
@@ -40,6 +41,7 @@ export const useStore = create<AppState>((set) => ({
   mastery: 100,
   propagationRisks: [],
   setStudent: (studentName, studentClass, studentSubject) => set({ studentName, studentClass, studentSubject }),
+  setSessionId: (sessionId) => set({ sessionId }),
   setLanguage: (language) => set({ language }),
   addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
   setLoading: (isLoading) => set({ isLoading }),

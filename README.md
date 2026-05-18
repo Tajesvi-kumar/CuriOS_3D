@@ -1,6 +1,6 @@
 # CuriOS — AI Learning Gap Detector
 
-An AI-powered diagnostic tool for Indian school students (NCERT Class 5–10) that finds the **root cause** of learning gaps through conversational probing — not just tutoring.
+> An AI-powered diagnostic tool for Indian school students (NCERT Class 5–10) that finds the **root cause** of learning gaps through conversational probing — not just tutoring.
 
 ---
 
@@ -8,89 +8,122 @@ An AI-powered diagnostic tool for Indian school students (NCERT Class 5–10) th
 
 ```
 curios-ai/
-├── backend/        # Python FastAPI server
-└── frontend/       # React + Vite app
+├── backend/          # Python FastAPI server
+│   ├── main.py
+│   ├── database.py
+│   ├── concept_graph.py
+│   ├── prompt_builder.py
+│   ├── ai_config.py
+│   ├── supabase_config.py
+│   ├── concept_graph.json
+│   └── requirements.txt
+└── frontend/         # React + Vite app
+    ├── src/
+    │   ├── components/
+    │   ├── store.ts
+    │   └── main.tsx
+    └── package.json
 ```
 
 ---
 
-## Frontend
+## Tech Stack
 
-**Stack:** React 19, TypeScript, Vite
-
+### Frontend
 | Library | Use |
 |---|---|
-| `@react-three/fiber` | 3D canvas renderer (React wrapper for Three.js) |
-| `@react-three/drei` | Helpers — `Stars`, `Float`, `OrbitControls` |
-| `three` | 3D engine — geometries, materials, particle systems |
-| `framer-motion` | Page transitions, animated entry/exit of panels |
-| `zustand` | Global state — session, messages, gaps, mastery score |
-| `axios` | HTTP calls to the FastAPI backend |
-| `recharts` | Radar chart for subject mastery visualization |
-| `lucide-react` | Icons (e.g. speaker icon for text-to-speech) |
-| `tailwindcss` | Utility CSS (configured via Vite plugin) |
+| React 19 + TypeScript | UI framework |
+| `@react-three/fiber` + `drei` | 3D canvas (Three.js) |
+| `framer-motion` | Page transitions & animations |
+| `zustand` | Global state management |
+| `axios` | HTTP calls to FastAPI backend |
+| `recharts` | Radar & bar charts |
+| `tailwindcss` | Utility CSS |
+| `lucide-react` | Icons |
 
-**Key Components:**
-
-- `LandingScene.tsx` — Full-screen 3D background with floating wireframe shapes, particle field, stars, glow ring, and cursor-reactive camera
-- `CursorGlow.tsx` — Custom glowing cursor with 12-dot animated trail effect
-- `App.tsx` — App state machine: Setup → Scanning → Main
-- `ChatArea.tsx` — Chat UI with typewriter effect for AI responses and Web Speech API for text-to-speech
-- `GapSidebar.tsx` — Live gap tracker with radar chart and color-coded gap status (root / confirmed / suspected)
-- `Scene.tsx` — 3D concept node visualization in the main chat view
+### Backend
+| Library | Use |
+|---|---|
+| `fastapi` + `uvicorn` | REST API server |
+| `httpx` | Async HTTP client for AI APIs |
+| `networkx` | Concept dependency graph |
+| `supabase-py` | Database (with local JSON fallback) |
+| `python-dotenv` | Environment variable loading |
+| `google-generativeai` | Gemini 2.5 Flash (quiz generation) |
+| Groq / NVIDIA / Ollama | Chat & analysis AI |
 
 ---
 
-## Backend
+## Key Features
 
-**Stack:** Python, FastAPI
-
-| Library | Use |
-|---|---|
-| `fastapi` | REST API framework |
-| `uvicorn` | ASGI server to run FastAPI |
-| `httpx` | Async HTTP client to call Gemini API |
-| `pydantic` | Request body validation |
-| `python-dotenv` | Load `.env` variables |
-| `networkx` | Directed graph for concept dependency mapping |
-| `google-generativeai` (via HTTP) | Gemini 2.5 Flash — the AI diagnostic engine |
-
-**Key Modules:**
-
-- `main.py` — FastAPI app with `/chat`, `/graph`, `/report` endpoints; manages per-session state
-- `concept_graph.py` — `ConceptGraphEngine` using NetworkX to trace root gaps and propagation risks from a concept dependency graph
-- `prompt_builder.py` — Builds the system prompt for Gemini with student profile, known gaps, and language preference
-- `concept_graph.json` — Node/edge data for NCERT concepts (matter, density, fractions, algebra, photosynthesis, etc.)
+- **Conversational gap detection** — Gemini probes students one question at a time
+- **Root cause analysis** — NetworkX traces which foundational concept is broken
+- **Teacher Dashboard** — Live analytics, student roster, gap heatmap, quiz history
+- **Quiz Mode** — Auto-generated quizzes targeting detected gaps
+- **3D Landing Scene** — Three.js particle field with cursor-reactive camera
+- **Offline-first** — Full local JSON fallback when Supabase is unreachable
 
 ---
 
 ## How It Works
 
-1. Student enters name, class, subject, and language on the setup screen
-2. CuriOS asks one probing question at a time via Gemini 2.5 Flash
-3. Every AI response includes a hidden `<ANALYSIS>` block that detects which concept the student is confused about
-4. The backend uses `networkx` to trace the root cause and find which future topics are at risk
-5. The frontend visualizes gaps in real-time on the sidebar radar chart and 3D scene
+1. Student enters name, class, subject, and language
+2. CuriOS asks one probing question at a time via Gemini
+3. Every AI response includes a hidden `<ANALYSIS>` block detecting the confused concept
+4. Backend uses NetworkX to trace the root cause and propagation risks
+5. Frontend visualizes gaps in real-time on the sidebar radar chart and 3D scene
+6. Teacher Dashboard aggregates all sessions for classroom-level insights
 
 ---
 
 ## Running Locally
 
+### Quick Start (Windows)
+```bat
+start-app.bat
+```
+
+### Manual Setup
+
 **Backend:**
 ```bash
-cd curios-ai/backend
-pip install fastapi uvicorn httpx python-dotenv networkx
-# Add GEMINI_API_KEY to .env
-uvicorn main:app --reload
+cd backend
+pip install -r requirements.txt
+# Copy .env.example to .env and fill in your keys
+uvicorn main:app --reload --port 8011
 ```
 
 **Frontend:**
 ```bash
-cd curios-ai/frontend
+cd frontend
 npm install
 npm run dev
 ```
 
-App runs at `http://localhost:5173`, backend at `http://localhost:8000`.
+App runs at `http://localhost:5173`, backend at `http://127.0.0.1:8011`.
 
-Project reference: https://idea.unisys.com/D9119
+---
+
+## Environment Variables
+
+Create `backend/.env`:
+
+```env
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_KEY=your_supabase_service_key
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-1.5-flash
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.3-70b-versatile
+NVIDIA_API_KEY=your_nvidia_api_key
+NVIDIA_MODEL=mistralai/mistral-medium-3.5-128b
+USE_OLLAMA=false
+```
+
+> The app works fully offline without Supabase — all data falls back to a local JSON store automatically.
+
+---
+
+## Project Reference
+
+Unisys Innovation Program — [idea.unisys.com/D9119](https://idea.unisys.com/D9119)

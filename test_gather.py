@@ -2,9 +2,9 @@ import asyncio
 import os
 import sys
 
-sys.path.insert(0, 'curios-ai/backend')
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 from prompt_builder import build_chat_prompt, build_analysis_prompt
-from ai_config import call_ai, call_gemini
+from ai_config import call_ai, call_groq
 
 async def test():
     chat_prompt = build_chat_prompt('Rahul', 7, [])
@@ -15,7 +15,7 @@ async def test():
     
     print("Starting gather...")
     chat_task = call_ai(full_chat_prompt)
-    analysis_task = call_gemini(full_analysis_prompt)
+    analysis_task = call_groq(full_analysis_prompt)
     
     try:
         student_message, analysis_text = await asyncio.gather(chat_task, analysis_task)

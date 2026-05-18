@@ -5,3 +5,7 @@ __pycache__/
 *.mp4
 dist/
 .vscode/
+backend/local_db.json
+backend/__pycache__/
+*.egg-info/
+.DS_Store

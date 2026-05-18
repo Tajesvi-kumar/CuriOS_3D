@@ -1,5 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import axios from 'axios'
 import { useStore } from './store'
+import TeacherDashboard from './components/TeacherDashboard'
+
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8011'
 import GapSidebar from './components/GapSidebar'
 import ChatArea from './components/ChatArea'
 import Scene from './components/Scene'
@@ -9,7 +13,7 @@ import QuizMode from './components/QuizMode'
 import { motion, AnimatePresence } from 'framer-motion'
 
 function SetupScreen({ onStart }: { onStart: () => void }) {
-  const { setStudent, setLanguage } = useStore()
+  const { setStudent, setLanguage, setSessionId } = useStore()
   const [name, setName] = useState('')
   const [cls, setCls] = useState('7')
   const [subject, setSubject] = useState('Mathematics')
@@ -36,17 +40,69 @@ function SetupScreen({ onStart }: { onStart: () => void }) {
     Hindi: ['संज्ञा क्या होती है?', 'क्रिया और विशेषण में क्या अंतर है?', 'मुहावरे क्या होते हैं?'],
   }
 
-  const handleStart = (prefill?: string) => {
-    setStudent(name || 'Student', +cls, subject)
+  const handleStart = async (prefill?: string) => {
+    const studentName = name || 'Student'
+    setStudent(studentName, +cls, subject)
     setLanguage(language)
     if (prefill) {
       useStore.getState().addMessage({ role: 'student', content: prefill })
+    }
+    // Create a Supabase-backed session and use its UUID as sessionId
+    try {
+      const { data } = await axios.post(`${API}/session/create`, {
+        student_name: studentName,
+        student_class: +cls,
+        subject,
+        language,
+      })
+      if (data?.session_id) {
+        setSessionId(data.session_id)
+      }
+    } catch (e) {
+      // Backend down or Supabase error – continue with local random ID
+      console.warn('[CuriOS] session/create failed, using local id', e)
     }
     onStart()
   }
 
   return (
     <>
+      {/* Teacher Portal - top left */}
+      <div style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 2 }}>
+        <button 
+          onClick={() => {
+            window.history.pushState({}, '', '/teacher');
+            window.dispatchEvent(new Event('popstate'));
+          }}
+          style={{
+            background: 'rgba(11, 12, 15, 0.6)',
+            border: '1px solid rgba(6, 182, 212, 0.4)',
+            borderRadius: '8px',
+            padding: '6px 12px',
+            color: '#22d3ee',
+            fontSize: '13px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            boxShadow: '0 0 10px rgba(6, 182, 212, 0.2)',
+            transition: 'all 0.3s ease'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(6, 182, 212, 0.1)';
+            e.currentTarget.style.boxShadow = '0 0 15px rgba(6, 182, 212, 0.4)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(11, 12, 15, 0.6)';
+            e.currentTarget.style.boxShadow = '0 0 10px rgba(6, 182, 212, 0.2)';
+          }}
+        >
+          <span>👥</span> Teacher Portal
+        </button>
+      </div>
+
       {/* Language picker - top right */}
       <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 2 }}>
         <select value={language} onChange={e => setLang(e.target.value)}
@@ -157,10 +213,24 @@ function ScanningScreen() {
 export default function App() {
   const [appState, setAppState] = useState<'setup' | 'scanning' | 'main'>('setup')
   const { isQuizActive } = useStore()
+  
+  const [currentPath, setCurrentPath] = useState(window.location.pathname)
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname)
+    }
+    window.addEventListener('popstate', handleLocationChange)
+    return () => window.removeEventListener('popstate', handleLocationChange)
+  }, [])
 
   const handleStart = () => {
     setAppState('scanning')
     setTimeout(() => setAppState('main'), 2500)
+  }
+
+  if (currentPath.startsWith('/teacher')) {
+    return <TeacherDashboard />
   }
 
   return (

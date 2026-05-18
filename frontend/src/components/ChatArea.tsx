@@ -3,7 +3,7 @@ import axios from 'axios'
 import { useStore } from '../store'
 import { Volume2 } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8011'
 
 function TypewriterMessage({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState('')
@@ -38,6 +38,17 @@ export default function ChatArea() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
 
+  const formatChatError = (error: any) => {
+    const detail = error?.response?.data?.detail || error?.message || ''
+    if (detail.includes('429') || detail.includes('quota') || detail.includes('RESOURCE_EXHAUSTED')) {
+      return '⚠️ API quota exceeded. The AI service has hit its daily limit. Please try again later or contact support.'
+    }
+    if (detail) {
+      return `Error: ${detail}`
+    }
+    return 'Sorry, something went wrong. Try again!'
+  }
+
   // Auto-send if an example question was prefilled before entering chat
   useEffect(() => {
     if (!hasSentInitial.current && messages.length === 1 && messages[0].role === 'student') {
@@ -54,12 +65,7 @@ export default function ChatArea() {
         addMessage({ role: 'curios', content: data.message })
         updateFromResponse(data)
       }).catch((err) => {
-        const msg = err?.response?.data?.detail || ''
-        if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
-          addMessage({ role: 'curios', content: '⚠️ API quota exceeded. The AI service has hit its daily limit. Please try again later or contact support.' })
-        } else {
-          addMessage({ role: 'curios', content: 'Sorry, something went wrong. Try again!' })
-        }
+        addMessage({ role: 'curios', content: formatChatError(err) })
       }).finally(() => setLoading(false))
     }
   }, [])
@@ -88,14 +94,7 @@ export default function ChatArea() {
       updateFromResponse(data)
     } catch (error: any) {
       console.error('Error:', error)
-      const detail = error?.response?.data?.detail || ''
-      if (detail.includes('429') || detail.includes('quota') || detail.includes('RESOURCE_EXHAUSTED')) {
-        addMessage({ role: 'curios', content: '⚠️ API quota exceeded. Please try again later.' })
-      } else if (detail) {
-        addMessage({ role: 'curios', content: `Error: ${detail}` })
-      } else {
-        addMessage({ role: 'curios', content: 'Sorry, something went wrong. Try again!' })
-      }
+      addMessage({ role: 'curios', content: formatChatError(error) })
     } finally {
       setLoading(false)
     }
