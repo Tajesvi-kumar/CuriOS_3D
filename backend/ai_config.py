@@ -136,7 +136,7 @@ async def call_groq(prompt: str) -> str:
             print("[WARN] GROQ_API_KEY is not configured, using local fallback")
             return _build_fallback_for_prompt(prompt)
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
                 GROQ_CHAT_COMPLETIONS_URL,
                 headers={
@@ -178,7 +178,7 @@ async def call_gemini(prompt: str) -> str:
             continue
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:  # 15s max, not 60s
                 response = await client.post(
                     url,
                     headers={"Content-Type": "application/json"},
@@ -186,7 +186,7 @@ async def call_gemini(prompt: str) -> str:
                         "contents": [{"parts": [{"text": prompt}]}],
                         "generationConfig": {
                             "temperature": 0.7,
-                            "maxOutputTokens": 2048,
+                            "maxOutputTokens": 512,  # shorter = faster
                         }
                     },
                 )

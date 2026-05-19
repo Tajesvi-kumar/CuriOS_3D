@@ -584,23 +584,10 @@ async def chat(req: ChatRequest):
     
     import asyncio
     try:
-        # Use Mistral 128B for chat (quality) and Mistral 7B for analysis (speed)
-        analysis_model = os.getenv("ANALYSIS_MODEL", "mistralai/mistral-7b-instruct-v03")
-        chat_out, analysis_out = await asyncio.gather(
-            call_ai(full_chat_prompt),
-            call_ai(full_analysis_prompt, model=analysis_model),
-            return_exceptions=True,
-        )
-        if isinstance(chat_out, Exception):
-            print(f"[WARN] Chat AI failed: {chat_out}")
-            student_message = build_safe_chat_fallback(req.message, req.language)
-        else:
-            student_message = chat_out
-        if isinstance(analysis_out, Exception):
-            print(f"[WARN] Analysis AI failed: {analysis_out}")
-            analysis_text = json.dumps(build_local_analysis(req.message))
-        else:
-            analysis_text = analysis_out
+        # Only 1 AI call for chat — analysis uses fast local keyword matching
+        chat_out = await call_ai(full_chat_prompt)
+        student_message = chat_out
+        analysis_text = json.dumps(build_local_analysis(req.message))
     except Exception as e:
         print(f"[ERROR] /chat unexpected failure: {e}")
         traceback.print_exc()
