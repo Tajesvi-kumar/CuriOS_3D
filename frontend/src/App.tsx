@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { useStore } from './store'
 import TeacherDashboard from './components/TeacherDashboard'
+import TeacherLogin from './components/TeacherLogin'
 
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8011'
 import GapSidebar from './components/GapSidebar'
@@ -227,6 +228,10 @@ export default function App() {
   }
 
   if (currentPath.startsWith('/teacher')) {
+    const isAuth = sessionStorage.getItem('teacher_auth') === 'true'
+    if (!isAuth) {
+      return <TeacherLogin onSuccess={() => window.location.reload()} />
+    }
     return <TeacherDashboard />
   }
 

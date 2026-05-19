@@ -316,14 +316,11 @@ async def call_cerebras(prompt: str, model: str = None) -> str:
 
 
 async def call_ai(prompt: str, model: str = None) -> str:
-    """Main AI call — Groq (fast, free) → Gemini → local fallback."""
-    # Groq first — fast and reliable
+    """Main AI call — Groq (primary, ~1s) → Gemini → local fallback."""
     try:
         return await call_groq(prompt)
     except Exception as e:
         print(f"[WARN] Groq failed: {e}, trying Gemini")
-
-    # Gemini fallback
     try:
         return await call_gemini(prompt)
     except Exception as e:
