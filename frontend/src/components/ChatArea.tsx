@@ -225,7 +225,7 @@ export default function ChatArea() {
             className="glass-input"
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && sendMessage()}
+            onKeyDown={e => { if (e.key === 'Enter') sendMessage() }}
             placeholder="Type your question or answer..."
             style={{
               flex: 1, borderRadius: '12px', padding: '10px 16px', boxSizing: 'border-box'
