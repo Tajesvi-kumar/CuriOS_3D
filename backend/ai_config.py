@@ -273,17 +273,17 @@ async def call_nvidia(prompt: str, model: str = None) -> str:
 
 
 async def call_cerebras(prompt: str, model: str = None) -> str:
-    """Cerebras Cloud Inference API call. Env: CEREBRAS_API_KEY, CEREBRAS_MODEL."""
+    """Cerebras Cloud Inference API call — fastest response ~0.5s."""
     try:
         key = (CEREBRAS_API_KEY or os.getenv("CEREBRAS_API_KEY") or "").strip()
         if not key:
             print("[WARN] CEREBRAS_API_KEY is not configured, falling back to Gemini")
             return await call_gemini(prompt)
 
-        model_name = model or os.getenv("CEREBRAS_MODEL", "llama3.1-8b")
-        print(f"Calling Cerebras with model: {model_name}")
+        model_name = model or os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")
+        print(f"[Cerebras] Calling model: {model_name}")
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
                 CEREBRAS_URL,
                 headers={
@@ -294,52 +294,47 @@ async def call_cerebras(prompt: str, model: str = None) -> str:
                     "model": model_name,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.7,
-                    "max_tokens": 2048,
+                    "max_tokens": 512,
                 },
             )
             
             if response.status_code != 200:
-                print(f"[WARN] Cerebras API error {response.status_code}: {response.text[:500]}, falling back to Gemini")
+                print(f"[WARN] Cerebras error {response.status_code}: {response.text[:300]}, falling back to Gemini")
                 return await call_gemini(prompt)
             
             data = response.json()
             if "choices" in data and len(data["choices"]) > 0:
                 content = data["choices"][0]["message"]["content"].strip()
-                # Remove potential thinking/reasoning tags if model adds them
                 content = re.sub(r'<thought>.*?</thought>', '', content, flags=re.DOTALL)
                 return content.strip()
             
             raise ValueError("Invalid response structure from Cerebras API")
             
     except Exception as e:
-        import traceback
-        print(f"[ERROR] Cerebras API request failed ({type(e).__name__}: {e}), falling back to Gemini")
-        traceback.print_exc()
+        print(f"[ERROR] Cerebras failed ({type(e).__name__}: {e}), falling back to Gemini")
         return await call_gemini(prompt)
 
 
 async def call_ai(prompt: str, model: str = None) -> str:
-    """Main AI call — Gemini (primary) → Gemini backup → Cerebras → Groq → local fallback."""
-    # Try Gemini first (fastest + most reliable)
+    """Main AI call — Cerebras (fastest) → Gemini → Groq → local fallback."""
+    # Cerebras first — ~0.5s response
+    if (CEREBRAS_API_KEY or os.getenv("CEREBRAS_API_KEY", "")).strip():
+        try:
+            return await call_cerebras(prompt, model=model)
+        except Exception as e:
+            print(f"[WARN] Cerebras failed: {e}, trying Gemini")
+
+    # Gemini fallback
     try:
         return await call_gemini(prompt)
     except Exception as e:
-        print(f"[WARN] Gemini failed in call_ai: {e}, trying Cerebras")
+        print(f"[WARN] Gemini failed: {e}, trying Groq")
 
-    # Try Cerebras
-    if CEREBRAS_API_KEY:
-        try:
-            if model and ("mistral" in model or "llama" in model):
-                model = CEREBRAS_MODEL
-            return await call_cerebras(prompt, model=model)
-        except Exception as e:
-            print(f"[WARN] Cerebras failed in call_ai: {e}, trying Groq")
-
-    # Final fallback: Groq
+    # Groq fallback
     try:
         return await call_groq(prompt)
     except Exception as e:
-        print(f"[WARN] Groq failed in call_ai: {e}, using local fallback")
+        print(f"[WARN] Groq failed: {e}, using local fallback")
         return _build_fallback_for_prompt(prompt)
 
 
