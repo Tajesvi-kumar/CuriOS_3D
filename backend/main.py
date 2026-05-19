@@ -12,6 +12,8 @@ from ai_config import (
     OLLAMA_MODEL,
     OLLAMA_URL,
     USE_OLLAMA,
+    CEREBRAS_API_KEY,
+    CEREBRAS_MODEL,
     call_ai,
     call_groq,
     call_gemini, # ADDED
@@ -330,11 +332,17 @@ def root():
 
 @app.get("/ai/status")
 async def ai_status():
-    mode = "ollama" if USE_OLLAMA else "groq"
+    if CEREBRAS_API_KEY:
+        mode = "cerebras"
+    else:
+        mode = "ollama" if USE_OLLAMA else "groq"
+
     ollama_status = "skipped"
     ollama_detail = ""
     groq_status = "unconfigured"
     groq_detail = "Set GROQ_API_KEY in backend/.env"
+    cerebras_status = "unconfigured"
+    cerebras_detail = "Set CEREBRAS_API_KEY in backend/.env"
 
     if USE_OLLAMA:
         ollama_status = "connected"
@@ -389,7 +397,33 @@ async def ai_status():
             groq_status = "error"
             groq_detail = str(e)
 
-    if USE_OLLAMA:
+    if CEREBRAS_API_KEY:
+        cerebras_status = "connected"
+        cerebras_detail = ""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.post(
+                    "https://api.cerebras.ai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {CEREBRAS_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": CEREBRAS_MODEL,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "max_tokens": 5,
+                    },
+                )
+                if r.status_code != 200:
+                    cerebras_status = "error"
+                    cerebras_detail = r.text[:400]
+        except Exception as e:
+            cerebras_status = "error"
+            cerebras_detail = str(e)
+
+    if mode == "cerebras":
+        status, detail = cerebras_status, cerebras_detail
+    elif mode == "ollama":
         status, detail = ollama_status, ollama_detail
     else:
         status, detail = groq_status, groq_detail
@@ -397,14 +431,17 @@ async def ai_status():
     return {
         "mode": mode,
         "ollama_url": OLLAMA_URL,
-        "model": OLLAMA_MODEL if USE_OLLAMA else GROQ_MODEL,
+        "model": CEREBRAS_MODEL if mode == "cerebras" else (OLLAMA_MODEL if USE_OLLAMA else GROQ_MODEL),
         "groq_model": GROQ_MODEL,
+        "cerebras_model": CEREBRAS_MODEL,
         "status": status,
         "detail": detail,
         "ollama_status": ollama_status,
         "ollama_detail": ollama_detail,
         "groq_status": groq_status,
         "groq_detail": groq_detail,
+        "cerebras_status": cerebras_status,
+        "cerebras_detail": cerebras_detail,
     }
 
 @app.get("/graph")

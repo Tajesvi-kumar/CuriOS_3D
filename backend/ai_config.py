@@ -23,8 +23,13 @@ GROQ_CHAT_COMPLETIONS_URL = os.getenv(
 )
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY_BACKUP = os.getenv("GEMINI_API_KEY_BACKUP", "AIzaSyB95_DTGGZDjfLM-B2xzw_kywb8iLbubME")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
+CEREBRAS_MODEL = os.getenv("CEREBRAS_MODEL", "llama3.1-8b")
+CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 
 
 def _extract_ollama_text(payload: dict) -> str:
@@ -166,39 +171,40 @@ async def call_groq(prompt: str) -> str:
 
 
 async def call_gemini(prompt: str) -> str:
-    """Google Gemini API call."""
-    try:
-        key = (GEMINI_API_KEY or os.getenv("GEMINI_API_KEY") or "").strip()
+    """Google Gemini API call — tries primary key, then backup key, then Groq."""
+    for key in [GEMINI_API_KEY, GEMINI_API_KEY_BACKUP]:
+        key = (key or "").strip()
         if not key:
-            print("[WARN] GEMINI_API_KEY is not configured, falling back to Groq")
-            return await call_groq(prompt)
+            continue
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    url,
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "temperature": 0.7,
+                            "maxOutputTokens": 2048,
+                        }
+                    },
+                )
+                if response.status_code != 200:
+                    print(f"[WARN] Gemini key ...{key[-6:]} error {response.status_code}, trying next key")
+                    continue
+                data = response.json()
+                try:
+                    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                except Exception:
+                    print(f"[WARN] Gemini key ...{key[-6:]} bad response structure, trying next key")
+                    continue
+        except Exception as e:
+            print(f"[WARN] Gemini key ...{key[-6:]} failed: {e}, trying next key")
+            continue
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                url,
-                headers={"Content-Type": "application/json"},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "temperature": 0.7,
-                        "maxOutputTokens": 2048,
-                    }
-                },
-            )
-            if response.status_code != 200:
-                print(f"[WARN] Gemini API error {response.status_code}: {response.text[:500]}")
-                return await call_groq(prompt)
-            
-            data = response.json()
-            try:
-                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            except Exception:
-                raise ValueError("Invalid Gemini response structure")
-    except Exception as e:
-        print(f"[ERROR] Gemini API request failed: {e}")
-        return await call_groq(prompt)
+    print("[WARN] All Gemini keys failed, falling back to Groq")
+    return await call_groq(prompt)
 
 
 async def call_nvidia(prompt: str, model: str = None) -> str:
@@ -266,9 +272,75 @@ async def call_nvidia(prompt: str, model: str = None) -> str:
         return await call_groq(prompt)
 
 
+async def call_cerebras(prompt: str, model: str = None) -> str:
+    """Cerebras Cloud Inference API call. Env: CEREBRAS_API_KEY, CEREBRAS_MODEL."""
+    try:
+        key = (CEREBRAS_API_KEY or os.getenv("CEREBRAS_API_KEY") or "").strip()
+        if not key:
+            print("[WARN] CEREBRAS_API_KEY is not configured, falling back to Gemini")
+            return await call_gemini(prompt)
+
+        model_name = model or os.getenv("CEREBRAS_MODEL", "llama3.1-8b")
+        print(f"Calling Cerebras with model: {model_name}")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                CEREBRAS_URL,
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 2048,
+                },
+            )
+            
+            if response.status_code != 200:
+                print(f"[WARN] Cerebras API error {response.status_code}: {response.text[:500]}, falling back to Gemini")
+                return await call_gemini(prompt)
+            
+            data = response.json()
+            if "choices" in data and len(data["choices"]) > 0:
+                content = data["choices"][0]["message"]["content"].strip()
+                # Remove potential thinking/reasoning tags if model adds them
+                content = re.sub(r'<thought>.*?</thought>', '', content, flags=re.DOTALL)
+                return content.strip()
+            
+            raise ValueError("Invalid response structure from Cerebras API")
+            
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Cerebras API request failed ({type(e).__name__}: {e}), falling back to Gemini")
+        traceback.print_exc()
+        return await call_gemini(prompt)
+
+
 async def call_ai(prompt: str, model: str = None) -> str:
-    print(f"Using NVIDIA API for: {prompt[:50]}...")
-    return await call_nvidia(prompt, model=model)
+    """Main AI call — Cerebras → Gemini (primary + backup) → Groq → local fallback."""
+    # Try Cerebras first if key is set
+    if CEREBRAS_API_KEY:
+        try:
+            if model and ("mistral" in model or "llama" in model):
+                model = CEREBRAS_MODEL
+            return await call_cerebras(prompt, model=model)
+        except Exception as e:
+            print(f"[WARN] Cerebras failed in call_ai: {e}, trying Gemini")
+
+    # Try Gemini (handles primary + backup internally)
+    try:
+        return await call_gemini(prompt)
+    except Exception as e:
+        print(f"[WARN] Gemini failed in call_ai: {e}, trying Groq")
+
+    # Final fallback: Groq
+    try:
+        return await call_groq(prompt)
+    except Exception as e:
+        print(f"[WARN] Groq failed in call_ai: {e}, using local fallback")
+        return _build_fallback_for_prompt(prompt)
 
 
 def extract_json(text: str) -> dict:
