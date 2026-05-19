@@ -319,21 +319,21 @@ async def call_cerebras(prompt: str, model: str = None) -> str:
 
 
 async def call_ai(prompt: str, model: str = None) -> str:
-    """Main AI call — Cerebras → Gemini (primary + backup) → Groq → local fallback."""
-    # Try Cerebras first if key is set
+    """Main AI call — Gemini (primary) → Gemini backup → Cerebras → Groq → local fallback."""
+    # Try Gemini first (fastest + most reliable)
+    try:
+        return await call_gemini(prompt)
+    except Exception as e:
+        print(f"[WARN] Gemini failed in call_ai: {e}, trying Cerebras")
+
+    # Try Cerebras
     if CEREBRAS_API_KEY:
         try:
             if model and ("mistral" in model or "llama" in model):
                 model = CEREBRAS_MODEL
             return await call_cerebras(prompt, model=model)
         except Exception as e:
-            print(f"[WARN] Cerebras failed in call_ai: {e}, trying Gemini")
-
-    # Try Gemini (handles primary + backup internally)
-    try:
-        return await call_gemini(prompt)
-    except Exception as e:
-        print(f"[WARN] Gemini failed in call_ai: {e}, trying Groq")
+            print(f"[WARN] Cerebras failed in call_ai: {e}, trying Groq")
 
     # Final fallback: Groq
     try:
