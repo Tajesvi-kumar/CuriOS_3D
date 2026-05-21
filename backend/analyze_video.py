@@ -1,8 +1,7 @@
 import google.generativeai as genai
 import os
 import time
-
-genai.configure(api_key="AIzaSyCcR-qUfN19FGmbWVDmkQ5TgFQUKmkFRM4")
+genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
 
 video_path = r"C:\Users\tajes\OneDrive\Attachments\Desktop\glxy\WhatsApp Video 2026-04-17 at 23.21.06.mp4"
 

@@ -23,7 +23,7 @@ GROQ_CHAT_COMPLETIONS_URL = os.getenv(
 )
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_API_KEY_BACKUP = os.getenv("GEMINI_API_KEY_BACKUP", "AIzaSyB95_DTGGZDjfLM-B2xzw_kywb8iLbubME")
+GEMINI_API_KEY_BACKUP = os.getenv("GEMINI_API_KEY_BACKUP", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
