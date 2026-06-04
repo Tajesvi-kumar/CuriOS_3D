@@ -12,6 +12,7 @@ import LandingScene from './components/LandingScene'
 import CursorGlow from './components/CursorGlow'
 import QuizMode from './components/QuizMode'
 import { motion, AnimatePresence } from 'framer-motion'
+import ReviewReminder from './components/ReviewReminder'
 
 function SetupScreen({ onStart }: { onStart: () => void }) {
   const { setStudent, setLanguage, setSessionId } = useStore()
@@ -256,6 +257,7 @@ export default function App() {
             transition={{ duration: 1 }}
             style={{ width: '100%', height: '100%' }}
           >
+            <ReviewReminder />
             <Scene />
             <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', display: 'flex', justifyContent: 'space-between', zIndex: 10 }}>
               <motion.div 

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import os, json, re, httpx, traceback, random, uuid, time
 from datetime import datetime
 from emotion_engine import EmotionEngine
+from spaced_repetition import SpacedRepetitionEngine
 from typing import Any
 from dotenv import load_dotenv
 from concept_graph import engine
@@ -92,6 +93,7 @@ class QuizGenerateRequest(BaseModel):
     student_name: str
     student_class: int
     language: str = "English"
+    concepts: list[str] | None = None
 
 class QuizChapterRequest(BaseModel):
     session_id: str
@@ -133,6 +135,11 @@ class QuizSubmitRequest(BaseModel):
     concept_analysis: dict[str, Any] = {}
     new_gaps: list[dict[str, Any] | str] = []
     answers: list[dict[str, Any]]
+
+class ReviewRecordRequest(BaseModel):
+    session_id: str
+    concept_id: str
+    quality_score: int
 
 
 
@@ -746,7 +753,10 @@ async def generate_quiz(req: QuizGenerateRequest):
     
     session = sessions[req.session_id]
     # Identify gaps to test
-    target_gaps = [k for k, v in session["gaps"].items() if v in ["suspected", "confirmed", "root"]]
+    if req.concepts:
+        target_gaps = req.concepts
+    else:
+        target_gaps = [k for k, v in session["gaps"].items() if v in ["suspected", "confirmed", "root"]]
     
     # If no gaps, just pick a few general topics from the graph for the student's class
     if not target_gaps:
@@ -1472,3 +1482,23 @@ Respond ONLY with this valid JSON object, no other commentary or markdown format
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/review/due")
+def get_due_reviews(session_id: str):
+    try:
+        due = SpacedRepetitionEngine.get_due_concepts(session_id)
+        return due
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch due concepts: {str(e)}")
+
+@app.post("/review/record")
+def record_review(req: ReviewRecordRequest):
+    try:
+        result = SpacedRepetitionEngine.store_review(
+            session_id=req.session_id,
+            concept_id=req.concept_id,
+            quality_score=req.quality_score
+        )
+        return {"success": True, "record": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to record review: {str(e)}")
