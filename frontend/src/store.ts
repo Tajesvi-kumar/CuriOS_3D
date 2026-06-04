@@ -18,6 +18,7 @@ interface AppState {
   gaps: Record<string, GapStatus>
   mastery: number
   propagationRisks: string[]
+  emotionState: 'engaged' | 'confused' | 'frustrated' | 'bored'
   setStudent: (name: string, cls: number, subject: string) => void
   setSessionId: (id: string) => void
   setLanguage: (lang: string) => void
@@ -27,6 +28,7 @@ interface AppState {
   isQuizActive: boolean
   setQuizActive: (active: boolean) => void
   updateGapsAndMastery: (gaps: Record<string, GapStatus>, mastery: number) => void
+  setEmotionState: (state: 'engaged' | 'confused' | 'frustrated' | 'bored') => void
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -40,6 +42,7 @@ export const useStore = create<AppState>((set) => ({
   gaps: {},
   mastery: 100,
   propagationRisks: [],
+  emotionState: 'engaged',
   setStudent: (studentName, studentClass, studentSubject) => set({ studentName, studentClass, studentSubject }),
   setSessionId: (sessionId) => set({ sessionId }),
   setLanguage: (language) => set({ language }),
@@ -52,9 +55,11 @@ export const useStore = create<AppState>((set) => ({
       gaps: newGaps,
       mastery: data.mastery ?? 100,
       propagationRisks: data.propagation_risks || [],
+      emotionState: data.emotion_state || 'engaged',
     }
   }),
   isQuizActive: false,
   setQuizActive: (isQuizActive) => set({ isQuizActive }),
   updateGapsAndMastery: (gaps, mastery) => set({ gaps, mastery }),
+  setEmotionState: (emotionState) => set({ emotionState }),
 }))

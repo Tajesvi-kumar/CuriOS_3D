@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import axios from 'axios'
 import { useStore } from '../store'
 import { Volume2 } from 'lucide-react'
+import EmotionIndicator from './EmotionIndicator'
 
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8011'
 
@@ -119,25 +120,28 @@ export default function ChatArea() {
             <p style={{ color: '#9ca3af', fontSize: '11px' }}>AI Learning Diagnostics • NCERT Class 5–10</p>
           </div>
         </div>
-        <button 
-          onClick={() => useStore.getState().setQuizActive(true)}
-          style={{
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '8px',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
-          }}
-        >
-          <span style={{ fontSize: '14px' }}>📝</span> Quiz Mode
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button 
+            onClick={() => useStore.getState().setQuizActive(true)}
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
+            }}
+          >
+            <span style={{ fontSize: '14px' }}>📝</span> Quiz Mode
+          </button>
+          <EmotionIndicator />
+        </div>
       </div>
 
       {/* Messages */}

@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import os, json, re, httpx, traceback, random, uuid
+import os, json, re, httpx, traceback, random, uuid, time
 from datetime import datetime
+from emotion_engine import EmotionEngine
 from typing import Any
 from dotenv import load_dotenv
 from concept_graph import engine
@@ -66,6 +67,9 @@ def build_local_session(session_id: str, student_name: str, student_class: int, 
         "updated_at": now,
         "quiz_attempts": [],
         "quiz_answers": [],
+        "concept_failures": {},
+        "last_ai_response_time": None,
+        "emotion_state": "engaged",
     }
 
 
@@ -547,6 +551,9 @@ async def chat(req: ChatRequest):
                 "updated_at": db_session.get("updated_at"),
                 "quiz_attempts": [],
                 "quiz_answers": [],
+                "concept_failures": {},
+                "last_ai_response_time": None,
+                "emotion_state": "engaged",
             }
         else:
             sessions[req.session_id] = build_local_session(
@@ -571,11 +578,24 @@ async def chat(req: ChatRequest):
     session = sessions[req.session_id]
     known_gaps = [k for k, v in session["gaps"].items() if v in ["confirmed", "root"]]
     
+    # Compute response latency and emotional state
+    last_ai_time = session.get("last_ai_response_time")
+    now_time = time.time()
+    latency_ms = (now_time - last_ai_time) * 1000 if last_ai_time is not None else None
+    
+    history = session.setdefault("history", [])
+    concept_failures = session.setdefault("concept_failures", {})
+    emotion_state, tone_modifier = EmotionEngine.compute(req.session_id, latency_ms, req.message, history, concept_failures)
+    session["emotion_state"] = emotion_state
+    
     chat_prompt = build_chat_prompt(req.student_name, req.student_class, known_gaps, req.language)
+    if emotion_state != "engaged":
+        chat_prompt += f"\n\nCURRENT STUDENT EMOTION DETECTED: {emotion_state}\nTONE ADJUSTMENT MANDATE: {tone_modifier}\nAdjust your output tone immediately based on this modifier."
+        
     analysis_prompt = build_analysis_prompt(req.student_name, req.student_class, known_gaps, req.language)
     
     history_text = ""
-    for msg in session["history"][-6:]:
+    for msg in history[-6:]:
         role = "STUDENT" if msg["role"] == "student" else "CURIOS"
         history_text += f"{role}: {msg['content']}\n"
     
@@ -610,6 +630,11 @@ async def chat(req: ChatRequest):
     
     if detected_concept and gap_status in ["confirmed", "suspected"]:
         session["gaps"][detected_concept] = gap_status
+        
+        # Track concept failure in chat probing
+        failures = session.setdefault("concept_failures", {})
+        failures[detected_concept] = failures.get(detected_concept, 0) + 1
+        
         root_gap_ids = engine.find_root_gaps(detected_concept)
         for rg in root_gap_ids:
             session["gaps"][rg] = "root"
@@ -620,6 +645,7 @@ async def chat(req: ChatRequest):
     
     session["history"].append({"role": "student", "content": req.message})
     session["history"].append({"role": "curios", "content": student_message})
+    session["last_ai_response_time"] = time.time()
 
     # ── Persist to Supabase (fire-and-forget; never crash /chat on DB errors) ──
     try:
@@ -660,7 +686,8 @@ async def chat(req: ChatRequest):
         "gaps": session["gaps"],
         "root_gaps": root_gaps,
         "propagation_risks": propagation_risks,
-        "mastery": session["mastery"]
+        "mastery": session["mastery"],
+        "emotion_state": emotion_state
     }
 
 @app.get("/report/{session_id}")
@@ -1013,9 +1040,21 @@ Just the JSON object."""
 @app.post("/quiz/submit")
 def submit_quiz(req: QuizSubmitRequest):
     if req.session_id not in sessions:
-        sessions[req.session_id] = {"gaps": {}, "history": [], "mastery": 100}
+        sessions[req.session_id] = {"gaps": {}, "history": [], "mastery": 100, "concept_failures": {}}
 
     session = sessions[req.session_id]
+    
+    # Update concept failures for both legacy and standard formats
+    failures = session.setdefault("concept_failures", {})
+    for ans in req.answers:
+        concept_id = ans.get("concept_tested") or ans.get("concept_id")
+        is_correct = bool(ans.get("is_correct", False))
+        if concept_id:
+            concept_id = str(concept_id).strip()
+            if is_correct:
+                failures[concept_id] = 0
+            else:
+                failures[concept_id] = failures.get(concept_id, 0) + 1
 
     # Legacy frontend compatibility path: accepts [{concept_id, is_correct}]
     is_legacy_answers = (
